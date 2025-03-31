@@ -58,4 +58,37 @@ resp_tib <- response |> resp_body_json(simplifyVector = TRUE) |>
   mutate(object_type = "CONTAINS") |>
   select(object_type, everything(), -meta)
 
-resp_tib <- response |> resp_body_json()
+# CREATE NODE ----
+query <- list(
+  statements = list(
+    list(
+      statement = "CREATE (x:Groente {name: $name}) RETURN x",
+      parameters = list(name = "bloemkool")
+    )
+  )
+)
+
+# run the cypher
+response <- request(neo_cred$url) |> req_auth_basic(neo_cred$usr, neo_cred$pwd) |>
+  req_body_json(query) |> req_perform()
+
+# response_content <- response |> resp_body_json()
+# print(response_content)
+
+# . check result ----
+query <- list(statements = list(list(statement = "
+MATCH (x:Groente)
+RETURN x
+limit 5;"
+)))
+
+# run the cypher
+response <- request(neo_cred$url) |> req_auth_basic(neo_cred$usr, neo_cred$pwd) |>
+  req_body_json(query) |> req_perform()
+
+# . check notifications ----
+resp_tib <- response |> resp_body_json(simplifyVector = TRUE) |> pluck("notifications")
+
+# make the result a tibble
+resp_tib <- response |> resp_body_json(simplifyVector = TRUE) |>
+  pluck("results", "data", 1) |> unnest(col = row) |> select(-meta)
