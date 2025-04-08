@@ -1,63 +1,14 @@
-library(shiny)
-library(readr)
-library(dplyr)
-library(httr2)
-library(jsonlite)
-library(purrr)
-library(tibble)
-library(glue)
-
-# -------------- Helper Functions --------------
-
-# Query Wikidata for matches
-get_entity_matches <- function(name, lang = "nl") {
-  req <- request("https://www.wikidata.org/w/api.php") |>
-    req_url_query(
-      action = "wbsearchentities",
-      search = name,
-      language = lang,
-      format = "json"
-    ) |>
-    req_perform()
-
-  result <- req |> resp_body_json()
-
-  if (length(result$search) == 0) return(NULL)
-
-  map_dfr(result$search, ~ {
-    tibble(
-      id          = .x$id %||% NA_character_,
-      label       = .x$label %||% NA_character_,
-      description = .x$description %||% NA_character_,
-      match_score = .x$match$score %||% NA_real_,
-      display     = paste0(.x$label, " — ", .x$description)
-    )
-  })
-}
-
-# Fetch Wikipedia URL for a given entity ID
-get_wikipedia_url <- function(entity_id, lang = "nl") {
-  entity_url <- glue("https://www.wikidata.org/wiki/Special:EntityData/{entity_id}.json")
-
-  req <- request(entity_url) |> req_perform()
-  entity_data <- req |> resp_body_json()
-
-  title <- entity_data$entities[[entity_id]]$sitelinks[[paste0(lang, "wiki")]]$title
-
-  if (is.null(title)) return(NA_character_)
-  glue("https://{lang}.wikipedia.org/wiki/{URLencode(title)}")
-}
-
 # -------------- Shiny App --------------
 
 ui <- fluidPage(
-  titlePanel("Batch Artist Resolver: Wikidata to Wikipedia"),
+  titlePanel("Wikidata Artist Resolver"),
   sidebarLayout(
     sidebarPanel(
       fileInput("tsv_file", "Upload .tsv-file with artist names"),
       actionButton("start_btn", "Start Processing"),
       uiOutput("selection_ui"),
       actionButton("confirm_btn", "Confirm Selection"),
+      uiOutput("download_ui"),
       textOutput("status")
     ),
     mainPanel(
@@ -75,14 +26,33 @@ server <- function(input, output, session) {
 
   resolved_results <- reactiveVal(tibble(
     artist_name = character(),
+    artist_czid = character(),
     wikidata_id = character(),
-    wikipedia_url = character()
+    wikipedia_nl = character(),
+    wikipedia_en = character(),
+    summary_nl = character(),
+    summary_en = character()
   ))
+
+  output$download_results <- downloadHandler(
+    filename = function() {
+      paste0("resolved_artists_", Sys.Date(), ".tsv")
+    },
+    content = function(file) {
+      write_tsv(resolved_results(), file)
+    }
+  )
+
+  output$download_ui <- renderUI({
+    if (!processing_active() && !is.null(artist_queue())) {
+      downloadButton("download_results", "Download Results", class = "btn-success")
+    }
+  })
 
   observeEvent(input$start_btn, {
     req(input$tsv_file)
     df <- read_tsv(input$tsv_file$datapath, col_types = cols(.default = "c"))
-    artist_queue(df$artist_name)
+    artist_queue(df)
     current_index(1)
     processing_active(TRUE)
   })
@@ -92,16 +62,16 @@ server <- function(input, output, session) {
     queue <- artist_queue()
     i <- current_index()
 
-    if (i > length(queue)) {
+    if (i > nrow(queue)) {
       current_artist(NULL)
       current_matches(NULL)
       processing_active(FALSE)  # 🔑 Stop further processing
       return()
     }
 
-    # if (i > length(queue)) return()
-
-    name <- queue[[i]]
+    artist_row <- queue[i, ]
+    name <- artist_row$artist_name
+    czid <- artist_row$artist_id
     current_artist(name)
 
     matches <- get_entity_matches(name)
@@ -112,8 +82,12 @@ server <- function(input, output, session) {
         resolved_results(),
         tibble(
           artist_name = name,
+          artist_czid = czid,
           wikidata_id = "Not Found",
-          wikipedia_url = NA_character_
+          wikipedia_nl = NA_character_,
+          wikipedia_en = NA_character_,
+          summary_nl = NA_character_,
+          summary_en = NA_character_
         )
       ))
 
@@ -121,33 +95,30 @@ server <- function(input, output, session) {
       return()  # Skip further processing
     }
 
-    # Check if we can auto-resolve
+    # Check if auto-resolve is possible
     auto_resolve <- FALSE
 
-    if (!is.null(matches)) {
-      if (nrow(matches) == 1) {
+    if (nrow(matches) == 1) {
+      auto_resolve <- TRUE
+    } else {
+      # Auto-resolve if the top match looks like a composer, etc.
+      desc <- matches$description[1]
+      if (!is.na(desc) && str_detect(desc,
+                                     regex("composer|conductor|musician|singer|pianist|guitarist|trumpeter",
+                                           ignore_case = TRUE))) {
         auto_resolve <- TRUE
-      } else {
-        # Auto-resolve if the top match looks like a composer, etc.
-        desc <- matches$description[1]
-        if (!is.na(desc)
-            && str_detect(desc, regex("composer|conductor|musician|singer|pianist|guitarist|trumpeter", ignore_case = TRUE))) {
-          auto_resolve <- TRUE
-        }
       }
     }
 
     if (auto_resolve) {
-      id <- matches$id[1]
-      url <- get_wikipedia_url(id)
+      urls_tib <- get_wikipedia_urls(matches$wikidata_id[1])
 
       resolved_results(bind_rows(
         resolved_results(),
         tibble(
           artist_name = name,
-          wikidata_id = id,
-          wikipedia_url = url
-        )
+          artist_czid = czid
+        ) |> bind_cols(urls_tib)
       ))
 
       current_index(i + 1)
@@ -163,25 +134,24 @@ server <- function(input, output, session) {
 
   output$selection_ui <- renderUI({
     matches <- current_matches()
+
     if (is.null(matches)) return(NULL)
 
     selectInput("selected_id", "Select a match:",
-                choices = setNames(matches$id, matches$display))
+                choices = setNames(matches$wikidata_id,
+                                   paste0(matches$label, " - ", matches$description)))
   })
 
   observeEvent(input$confirm_btn, {
     req(input$selected_id)
-
-    id <- input$selected_id
-    url <- get_wikipedia_url(id)
+    urls_tib <- get_wikipedia_urls(input$selected_id)
 
     resolved_results(bind_rows(
       resolved_results(),
       tibble(
         artist_name = current_artist(),
-        wikidata_id = id,
-        wikipedia_url = url
-      )
+        artist_czid = artist_queue()[current_index(), ]$artist_id
+      ) |> bind_cols(urls_tib)
     ))
 
     current_matches(NULL)
@@ -204,7 +174,7 @@ server <- function(input, output, session) {
       return("✅ All artists processed!")
     }
 
-    glue("🔄 Processing artist {i} of {length(queue)}...")
+    glue("🔄 Processing artist {i} of {nrow(queue)}")
   })
 }
 

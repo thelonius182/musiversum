@@ -1,7 +1,8 @@
 message("using UBU-config")
 
-pacman::p_load(httr2, jsonlite, readr, stringr, futile.logger, dplyr, purrr, glue, tidyr, yaml)
-source("R/msv_functions.R", encoding = "UTF-8")
+pacman::p_load(httr2, jsonlite, readr, stringr, futile.logger, dplyr,
+               purrr, glue, tidyr, yaml, shiny, git2r, lubridate)
+source("R/utils.R", encoding = "UTF-8")
 config <- read_yaml("config_ubu.yaml")
 
 lg_ini <- flog.appender(appender.file(config$log_file), name = config$log_slug)

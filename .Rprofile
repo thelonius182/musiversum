@@ -1,5 +1,4 @@
-ws <- getwd()
-message(stringr::str_glue("using .Rprofile in {ws}"))
+message(stringr::str_glue("using .Rprofile in {getwd()}"))
 
 get_git_branch <- function() {
   system("git rev-parse --abbrev-ref HEAD", intern = TRUE)
