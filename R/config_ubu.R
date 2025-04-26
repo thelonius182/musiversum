@@ -1,7 +1,7 @@
 message("using UBU-config")
 
 pacman::p_load(httr2, jsonlite, readr, stringr, futile.logger, dplyr,
-               purrr, glue, tidyr, yaml, shiny, git2r, lubridate)
+               purrr, glue, tidyr, yaml, shiny, git2r, lubridate, DT, bslib)
 source("R/utils.R", encoding = "UTF-8")
 config <- read_yaml("config_ubu.yaml")
 

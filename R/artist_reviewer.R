@@ -1,6 +1,22 @@
 # -------------- Shiny App --------------
 
-ui <- fluidPage(
+ui <- page_fluid(
+  theme = bs_theme(
+    bootswatch = "flatly",
+    base_font = font_google("Roboto")
+  ),
+  # Inject extra custom CSS safely here
+  shiny::tags$style(HTML("
+    .modal-body textarea.form-control {
+      width: 70%;
+      text-align: left;
+      vertical-align: top;
+      resize: both;
+    }
+    .modal-dialog {
+      max-width: 90%;
+    }
+  ")),
   titlePanel("Wikidata Artist Reviewer"),
   sidebarLayout(
     sidebarPanel(
@@ -38,7 +54,7 @@ ui <- fluidPage(
       )
     ),
     mainPanel(
-      tableOutput("results_tbl")
+      DTOutput("results_tbl")
     )
   )
 )
@@ -50,14 +66,18 @@ server <- function(input, output, session) {
   current_artist <- reactiveVal(NULL)
   processing_active <- reactiveVal(FALSE)
 
+  #define results ----
   resolved_results <- reactiveVal(tibble(
     artist_name = character(),
     artist_czid = character(),
     wikidata_id = character(),
     wikipedia_nl = character(),
     wikipedia_en = character(),
+    title_nl = character(),
+    title_en = character(),
     summary_nl = character(),
-    summary_en = character()
+    summary_en = character(),
+    modify = "blank"
   ))
 
   # download_results ----
@@ -122,8 +142,12 @@ server <- function(input, output, session) {
           wikidata_id = "Not Found",
           wikipedia_nl = NA_character_,
           wikipedia_en = NA_character_,
+          title_nl = NA_character_,
+          title_en = NA_character_,
           summary_nl = NA_character_,
-          summary_en = NA_character_
+          summary_en = NA_character_,
+          modify = "not_found"
+
         )
       ))
 
@@ -192,9 +216,15 @@ server <- function(input, output, session) {
       tibble(
         artist_name = current_artist(),
         artist_czid = artist_queue()[current_index(), ]$artist_id
-      ) |> bind_cols(urls_tib),
+      ) |> bind_cols(urls_tib) |> bind_cols(modify = "accepted"),
       resolved_results()
     ))
+
+    proxy <- dataTableProxy("results_tbl")
+    replaceData(proxy, resolved_results(), resetPaging = FALSE)  # optional
+    proxy |> selectRows(NULL)
+    proxy |> selectCells(NULL)
+    proxy |> clearSearch()
 
     current_matches(NULL)
     current_index(current_index() + 1)
@@ -216,11 +246,20 @@ server <- function(input, output, session) {
         wikidata_id = "Rejected",
         wikipedia_nl = NA_character_,
         wikipedia_en = NA_character_,
+        title_nl = NA_character_,
+        title_en = NA_character_,
         summary_nl = NA_character_,
-        summary_en = NA_character_
+        summary_en = NA_character_,
+        modify = "rejected"
       ),
       resolved_results()
     ))
+
+    proxy <- dataTableProxy("results_tbl")
+    replaceData(proxy, resolved_results(), resetPaging = FALSE)  # optional
+    proxy |> selectRows(NULL)
+    proxy |> selectCells(NULL)
+    proxy |> clearSearch()
 
     current_index(i + 1)
   })
@@ -254,8 +293,26 @@ server <- function(input, output, session) {
   })
 
   # output results ----
-  output$results_tbl <- renderTable({
-    resolved_results()
+  output$results_tbl <- renderDT({
+    datatable(
+      resolved_results(),
+      escape = FALSE,  # allow HTML inside table
+      selection = "none",
+      options = list(
+        columnDefs = list(
+          list(
+            targets = 10,
+            searching = FALSE,
+            render = JS(
+              "function(data, type, row, meta) {",
+              "return '<button class=\"edit_btn\">Edit</button>';",
+              "}"
+            )
+          )
+        )
+      )
+    ) |>
+      formatStyle(columns = 1:10, cursor = "pointer")
   })
 
   output$status <- renderText({
@@ -272,6 +329,37 @@ server <- function(input, output, session) {
     }
 
     glue("🔄 Processing artist {i} of {nrow(queue)}")
+  })
+
+  # edit summary ----
+  observeEvent(input$results_tbl_cell_clicked, {
+    click <- input$results_tbl_cell_clicked
+
+    if (is.null(click$value) || click$col != 10) return()  # Only if Edit button clicked
+
+    row_id <- click$row
+    current_data <- resolved_results()[row_id, ]
+
+    showModal(modalDialog(
+      title = "Edit a Summary",
+      textAreaInput("summary_nl", "Nederlands", value = current_data$summary_nl, width = "50%", rows = 5),
+      textAreaInput("summary_en", "English", value = current_data$summary_en, width = "50%", rows = 5),
+      # size = "l",
+      footer = tagList(
+        modalButton("Cancel"),
+        actionButton("save_edit", "Save Changes")
+      )
+    ))
+
+    # save changes ----
+    observeEvent(input$save_edit, {
+      new_data <- resolved_results()
+      # browser()
+      new_data[row_id, "summary_nl"] <- list(input$summary_nl %||% NA_character_)
+      new_data[row_id, "summary_en"] <- list(input$summary_en %||% NA_character_)
+      resolved_results(new_data)
+      removeModal()
+    }, once = TRUE)
   })
 }
 
