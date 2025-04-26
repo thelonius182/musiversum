@@ -6,10 +6,11 @@ ui <- fluidPage(
     sidebarPanel(
       fileInput("tsv_file", "Upload .tsv-file with artist names"),
       actionButton("start_btn", "Start Processing"),
-      uiOutput("selection_ui"),
-      actionButton("confirm_btn", "Confirm Selection"),
       uiOutput("download_ui"),
-      textOutput("status")
+      div(
+        style = "margin-top: 20px;",
+        textOutput("status")
+      )
     ),
     mainPanel(
       tableOutput("results_tbl")
@@ -34,6 +35,7 @@ server <- function(input, output, session) {
     summary_en = character()
   ))
 
+  # downloadHandler ----
   output$download_results <- downloadHandler(
     filename = function() {
       paste0("resolved_artists_", Sys.Date(), ".tsv")
@@ -49,6 +51,8 @@ server <- function(input, output, session) {
     }
   })
 
+  # load list of artists ----
+  # /mnt/muw/cz_artists_parts/cz_artists_chunk_x.tsv
   observeEvent(input$start_btn, {
     req(input$tsv_file)
     df <- read_tsv(input$tsv_file$datapath, col_types = cols(.default = "c"))
@@ -69,69 +73,92 @@ server <- function(input, output, session) {
       return()
     }
 
-    artist_row <- queue[i, ]
-    name <- artist_row$artist_name
-    czid <- artist_row$artist_id
-    current_artist(name)
+    if (i == 1) {
 
-    matches <- get_entity_matches(name)
+      # resolve artists ----
+      withProgress(message = "Resolving artists...", value = 0, {
 
-    # If no matches at all, record as Not Found
-    if (is.null(matches) || nrow(matches) == 0) {
-      resolved_results(bind_rows(
-        resolved_results(),
-        tibble(
-          artist_name = name,
-          artist_czid = czid,
-          wikidata_id = "Not Found",
-          wikipedia_nl = NA_character_,
-          wikipedia_en = NA_character_,
-          summary_nl = NA_character_,
-          summary_en = NA_character_
-        )
-      ))
+        for (j in seq(i, nrow(queue))) {
+          current_index(j)
+          artist_row <- queue[j, ]
+          name <- artist_row$artist_name
+          czid <- artist_row$artist_id
+          current_artist(name)
+          matches <- get_entity_matches(name)
 
-      current_index(i + 1)
-      return()  # Skip further processing
-    }
+          # no matches found ----
+          if (is.null(matches) || nrow(matches) == 0) {
+            resolved_results(bind_rows(
+              resolved_results(),
+              tibble(
+                artist_name = name,
+                artist_czid = czid,
+                wikidata_id = "Not Found",
+                wikipedia_nl = NA_character_,
+                wikipedia_en = NA_character_,
+                summary_nl = NA_character_,
+                summary_en = NA_character_
+              )
+            ))
 
-    # Check if auto-resolve is possible
-    auto_resolve <- FALSE
+            next
+          }
 
-    if (nrow(matches) == 1) {
-      auto_resolve <- TRUE
-    } else {
-      # Auto-resolve if the top match looks like a composer, etc.
-      desc <- matches$description[1]
-      if (!is.na(desc) && str_detect(desc,
-                                     regex("composer|conductor|musician|singer|pianist|guitarist|trumpeter",
-                                           ignore_case = TRUE))) {
-        auto_resolve <- TRUE
-      }
-    }
+          # Check if auto-resolve is possible
+          auto_resolve <- FALSE
 
-    if (auto_resolve) {
-      urls_tib <- get_wikipedia_urls(matches$wikidata_id[1])
+          # auto-resolve ----
+          if (nrow(matches) == 1) {
+            auto_resolve <- TRUE
+          } else {
 
-      resolved_results(bind_rows(
-        resolved_results(),
-        tibble(
-          artist_name = name,
-          artist_czid = czid
-        ) |> bind_cols(urls_tib)
-      ))
+            # Auto-resolve if the top match looks like a composer, etc.
+            desc <- matches$description[1]
+            if (!is.na(desc) && str_detect(desc,
+                                           regex("composer|conductor|musician|singer|pianist|guitarist|trumpeter",
+                                                 ignore_case = TRUE))) {
+              auto_resolve <- TRUE
+            }
+          }
 
-      current_index(i + 1)
-    } else {
-      # Manual review needed
-      if (!is.null(matches) && nrow(matches) > 0) {
-        current_matches(matches |> arrange(desc(match_score)))
-      } else {
-        current_matches(NULL)
-      }
+          # get_wikipedia_urls ----
+          if (auto_resolve) {
+            urls_tib <- get_wikipedia_urls(matches$wikidata_id[1])
+            urls_tib$summary_nl[[1]] <- urls_tib$summary_nl[[1]] |> str_remove_all("(\r)?\n") |> str_replace_all("\t", " ")
+            urls_tib$summary_en[[1]] <- urls_tib$summary_en[[1]] |> str_remove_all("(\r)?\n") |> str_replace_all("\t", " ")
+            resolved_results(bind_rows(
+              resolved_results(),
+              tibble(
+                artist_name = name,
+                artist_czid = czid
+              ) |> bind_cols(urls_tib)
+            ))
+
+          } else {
+
+            # mark for review ----
+            resolved_results(bind_rows(
+              resolved_results(),
+              tibble(
+                artist_name = name,
+                artist_czid = czid,
+                wikidata_id = "Needs Review",
+                wikipedia_nl = NA_character_,
+                wikipedia_en = NA_character_,
+                summary_nl = NA_character_,
+                summary_en = NA_character_
+              )))
+          }
+
+          incProgress(1 / nrow(queue))
+        }
+
+        processing_active(FALSE)
+        })
     }
   })
 
+  # Select a match ----
   output$selection_ui <- renderUI({
     matches <- current_matches()
 
@@ -142,6 +169,7 @@ server <- function(input, output, session) {
                                    paste0(matches$label, " - ", matches$description)))
   })
 
+  # Confirm a match ----
   observeEvent(input$confirm_btn, {
     req(input$selected_id)
     urls_tib <- get_wikipedia_urls(input$selected_id)
@@ -171,7 +199,7 @@ server <- function(input, output, session) {
     }
 
     if (!processing_active()) {
-      return("✅ All artists processed!")
+      return("✅  All artists processed.")
     }
 
     glue("🔄 Processing artist {i} of {nrow(queue)}")
