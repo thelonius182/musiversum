@@ -1,5 +1,3 @@
-pacman::p_load(readr, tidyr, dplyr, purrr, fs, conflicted)
-conflict_prefer("filter", "dplyr", quiet = TRUE)
 
 ls_resolved_artists <- dir_ls(path = "/home/lon/Downloads/", type = "file", regexp = "resolved_artists_c")
 combined_data <- map_dfr(ls_resolved_artists, ~ read_tsv(.x, col_types = cols(.default = "c")))

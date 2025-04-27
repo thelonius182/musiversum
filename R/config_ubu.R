@@ -1,7 +1,30 @@
 message("using UBU-config")
 
-pacman::p_load(httr2, jsonlite, readr, stringr, futile.logger, dplyr,
-               purrr, glue, tidyr, yaml, shiny, git2r, lubridate, DT, bslib)
+pacman::p_load(
+  bslib,
+  callr,
+  conflicted,
+  data.table,
+  dplyr,
+  DT,
+  fs,
+  futile.logger,
+  git2r,
+  glue,
+  httr2,
+  jsonlite,
+  lubridate,
+  purrr,
+  readr,
+  shiny,
+  shinyjs,
+  stringdist,
+  stringr,
+  tidyr,
+  yaml
+)
+conflict_prefer("pull", "dplyr", quiet = TRUE)
+conflict_prefer("filter", "dplyr", quiet = TRUE)
 source("R/utils.R", encoding = "UTF-8")
 config <- read_yaml("config_ubu.yaml")
 

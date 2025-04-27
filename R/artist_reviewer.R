@@ -5,6 +5,7 @@ ui <- page_fluid(
     bootswatch = "flatly",
     base_font = font_google("Roboto")
   ),
+  useShinyjs(),
   # Inject extra custom CSS safely here
   shiny::tags$style(HTML("
     .modal-body textarea.form-control {
@@ -35,7 +36,8 @@ ui <- page_fluid(
           style = "display: flex; gap: 10px;",
           actionButton("start_btn", "Start"),
           actionButton("stop_btn", "Stop"),
-          uiOutput("download_ui")
+          uiOutput("download_ui"),
+          actionButton("merge_artists_btn", "Merge artists", style = "display: none;")
         )
       ),
       div(
@@ -65,6 +67,9 @@ server <- function(input, output, session) {
   current_matches <- reactiveVal(NULL)
   current_artist <- reactiveVal(NULL)
   processing_active <- reactiveVal(FALSE)
+  merge_artists_done <- reactiveVal(FALSE)
+  merge_process <- reactiveVal(NULL)
+  app_msg <- reactiveVal(NULL)
 
   #define results ----
   resolved_results <- reactiveVal(tibble(
@@ -88,7 +93,8 @@ server <- function(input, output, session) {
     content = function(file) {
       on.exit({
         session$onFlushed(function() {
-          stopApp()
+          shinyjs::show("merge_artists_btn")
+          app_msg("📥 Download completed. Ready to merge.")
         }, once = TRUE)
       })
 
@@ -96,6 +102,49 @@ server <- function(input, output, session) {
     }
   )
 
+  # merge artists ----
+  observeEvent(input$merge_artists_btn, {
+    if (!is.null(merge_process()) && merge_process()$is_alive()) {
+      showNotification("Merging already in progress...", type = "warning")
+      return()  # Don't start another process
+    }
+    app_msg("🔄 Merging artists, please wait...")
+    tmp_resolved_results <- tempfile(fileext = ".rds")
+    write_rds(resolved_results(), tmp_resolved_results)
+
+    # Start the external merge process
+    process <- callr::r_bg(
+      function(script, args) {
+        system2("Rscript", c(script, args))
+      },
+      args = list("merge_artists.R", tmp_resolved_results)
+    )
+
+    merge_process(process)  # Store the process object
+  })
+
+  # merge finished? ----
+  observe({
+    invalidateLater(1000, session)  # Check every second
+
+    proc <- merge_process()
+    if (is.null(proc) || proc$is_alive()) return()
+
+    # Process finished
+    if (!merge_artists_done()) {
+      merge_artists_done(TRUE)  # Only set done once
+    }
+  })
+
+  # stop app ----
+  observeEvent(merge_artists_done(), {
+    if (merge_artists_done()) {
+      app_msg("✅ Merging finished. Closing app...")
+      stopApp()
+    }
+  })
+
+  # show download-btn ----
   output$download_ui <- renderUI({
     if (!processing_active() && !is.null(artist_queue())) {
       downloadButton("download_results", "Download Results", class = "btn-success")
@@ -310,12 +359,30 @@ server <- function(input, output, session) {
             )
           )
         )
-      )
+      ),
+      callback = JS("
+      table.on('dblclick', 'td', function() {
+        var cellText = $(this).text();
+        navigator.clipboard.writeText(cellText);
+        Shiny.setInputValue('cell_copied', cellText);
+      });
+    ")
     ) |>
       formatStyle(columns = 1:10, cursor = "pointer")
   })
 
+  observeEvent(input$cell_copied, {
+    showNotification(
+      paste("📋 Copied:", input$cell_copied),
+      type = "message"
+    )
+  })
+
+  # show message ----
   output$status <- renderText({
+    # If a system message exists, show it first
+    if (!is.null(app_msg())) return(app_msg())
+
     queue <- artist_queue()
     i <- current_index()
 
@@ -354,7 +421,6 @@ server <- function(input, output, session) {
     # save changes ----
     observeEvent(input$save_edit, {
       new_data <- resolved_results()
-      # browser()
       new_data[row_id, "summary_nl"] <- list(input$summary_nl %||% NA_character_)
       new_data[row_id, "summary_en"] <- list(input$summary_en %||% NA_character_)
       resolved_results(new_data)
