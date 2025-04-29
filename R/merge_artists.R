@@ -17,4 +17,4 @@ qfn_resolved_results <- args[1]
 
 # Read the RDS file
 resolved_results <- read_rds(qfn_resolved_results)
-write_tsv(resolved_results, "rere.tsv")
+# write_tsv(resolved_results, "rere.tsv")

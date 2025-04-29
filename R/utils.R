@@ -72,13 +72,13 @@ get_wikipedia_urls <- function(wikidata_id) {
       title_nl      = NA_character_,
       title_en      = NA_character_,
       summary_nl    = NA_character_,
-      summary_en    = NA_character_
+      summary_en    = NA_character_,
+      img_url       = NA_character_
     ))
   }
 
   data <- resp_body_json(resp)
   sitelinks <- data$entities[[wikidata_id]]$sitelinks
-
   title_nl <- sitelinks$nlwiki$title %||% NA_character_
   title_en <- sitelinks$enwiki$title %||% NA_character_
 
@@ -94,9 +94,32 @@ get_wikipedia_urls <- function(wikidata_id) {
     } else {
       NA_character_
     },
-    title_nl      = title_nl,
-    title_en      = title_en,
-    summary_nl    = get_summary(title_nl, "nl"),
-    summary_en    = get_summary(title_en, "en")
+    title_nl   = title_nl,
+    title_en   = title_en,
+    summary_nl = get_summary(title_nl, "nl"),
+    summary_en = get_summary(title_en, "en"),
+    img_url    = get_commons_url(data$entities[[wikidata_id]])
   )
+}
+
+get_commons_url <- function(entity, width = 300) {
+  image_info <- entity$claims$P18
+
+  if (length(image_info) == 0) {
+    return(NA_character_)  # No image found
+  }
+
+  browser()
+  filename <- image_info[[1]]$mainsnak$datavalue$value
+  filename_clean <- gsub(" ", "_", filename)
+  file_hash <- digest::digest(tolower(filename_clean), algo = "md5", serialize = FALSE)
+
+  # Step 5: Build thumbnail URL (resized to 300px wide)
+  thumb_url <- str_glue("https://upload.wikimedia.org/wikipedia/commons/thumb/{substr(file_hash, 1, 1)}/{substr(file_hash, 1, 2)}/{filename_clean}/{width}px-{filename_clean}")
+
+  return(thumb_url)
+  # filename_encoded <- URLencode(gsub(" ", "_", filename), reserved = TRUE)
+  # image_url <- str_glue("https://commons.wikimedia.org/wiki/Special:FilePath/{filename_encoded}")
+
+  # return(image_url)
 }

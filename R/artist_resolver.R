@@ -24,6 +24,7 @@ server <- function(input, output, session) {
   current_matches <- reactiveVal(NULL)
   current_artist <- reactiveVal(NULL)
   processing_active <- reactiveVal(FALSE)
+  artist_rgx <- "artist|composer|conductor|guitarist|musician|pianist|singer|trumpeter"
 
   resolved_results <- reactiveVal(tibble(
     artist_name = character(),
@@ -32,7 +33,8 @@ server <- function(input, output, session) {
     wikipedia_nl = character(),
     wikipedia_en = character(),
     summary_nl = character(),
-    summary_en = character()
+    summary_en = character(),
+    img_url = character()
   ))
 
   # downloadHandler ----
@@ -82,6 +84,7 @@ server <- function(input, output, session) {
           current_index(j)
           artist_row <- queue[j, ]
           name <- artist_row$artist_name
+          flog.info(name, name = config$log_slug)
           czid <- artist_row$artist_id
           current_artist(name)
           matches <- get_entity_matches(name)
@@ -97,35 +100,24 @@ server <- function(input, output, session) {
                 wikipedia_nl = NA_character_,
                 wikipedia_en = NA_character_,
                 summary_nl = NA_character_,
-                summary_en = NA_character_
+                summary_en = NA_character_,
+                img_url = NA_character_
               )
             ))
 
             next
           }
 
-          # Check if auto-resolve is possible
-          auto_resolve <- FALSE
+          # review? ----
+          match_idx <- which(str_detect(matches$description, pattern = regex(artist_rgx, ignore_case = TRUE)))
 
-          # auto-resolve ----
-          if (nrow(matches) == 1) {
-            auto_resolve <- TRUE
-          } else {
-
-            # Auto-resolve if the top match looks like a composer, etc.
-            desc <- matches$description[1]
-            if (!is.na(desc) && str_detect(desc,
-                                           regex("composer|conductor|musician|singer|pianist|guitarist|trumpeter",
-                                                 ignore_case = TRUE))) {
-              auto_resolve <- TRUE
-            }
-          }
-
-          # get_wikipedia_urls ----
-          if (auto_resolve) {
-            urls_tib <- get_wikipedia_urls(matches$wikidata_id[1])
-            urls_tib$summary_nl[[1]] <- urls_tib$summary_nl[[1]] |> str_remove_all("(\r)?\n") |> str_replace_all("\t", " ")
-            urls_tib$summary_en[[1]] <- urls_tib$summary_en[[1]] |> str_remove_all("(\r)?\n") |> str_replace_all("\t", " ")
+          if (length(match_idx) == 1) {
+            # . get_wikipedia_urls ----
+            urls_tib <- get_wikipedia_urls(matches$wikidata_id[match_idx])
+            urls_tib$summary_nl[[1]] <- urls_tib$summary_nl[[1]] |>
+              str_remove_all("(\r)?\n") |> str_replace_all("\t", " ")
+            urls_tib$summary_en[[1]] <- urls_tib$summary_en[[1]] |>
+              str_remove_all("(\r)?\n") |> str_replace_all("\t", " ")
             resolved_results(bind_rows(
               resolved_results(),
               tibble(
@@ -146,7 +138,8 @@ server <- function(input, output, session) {
                 wikipedia_nl = NA_character_,
                 wikipedia_en = NA_character_,
                 summary_nl = NA_character_,
-                summary_en = NA_character_
+                summary_en = NA_character_,
+                img_url = NA_character_
               )))
           }
 
@@ -159,32 +152,32 @@ server <- function(input, output, session) {
   })
 
   # Select a match ----
-  output$selection_ui <- renderUI({
-    matches <- current_matches()
-
-    if (is.null(matches)) return(NULL)
-
-    selectInput("selected_id", "Select a match:",
-                choices = setNames(matches$wikidata_id,
-                                   paste0(matches$label, " - ", matches$description)))
-  })
+  # output$selection_ui <- renderUI({
+  #   matches <- current_matches()
+  #
+  #   if (is.null(matches)) return(NULL)
+  #
+  #   selectInput("selected_id", "Select a match:",
+  #               choices = setNames(matches$wikidata_id,
+  #                                  paste0(matches$label, " - ", matches$description)))
+  # })
 
   # Confirm a match ----
-  observeEvent(input$confirm_btn, {
-    req(input$selected_id)
-    urls_tib <- get_wikipedia_urls(input$selected_id)
-
-    resolved_results(bind_rows(
-      resolved_results(),
-      tibble(
-        artist_name = current_artist(),
-        artist_czid = artist_queue()[current_index(), ]$artist_id
-      ) |> bind_cols(urls_tib)
-    ))
-
-    current_matches(NULL)
-    current_index(current_index() + 1)
-  })
+  # observeEvent(input$confirm_btn, {
+  #   req(input$selected_id)
+  #   urls_tib <- get_wikipedia_urls(input$selected_id)
+  #
+  #   resolved_results(bind_rows(
+  #     resolved_results(),
+  #     tibble(
+  #       artist_name = current_artist(),
+  #       artist_czid = artist_queue()[current_index(), ]$artist_id
+  #     ) |> bind_cols(urls_tib)
+  #   ))
+  #
+  #   current_matches(NULL)
+  #   current_index(current_index() + 1)
+  # })
 
   output$results_tbl <- renderTable({
     resolved_results()

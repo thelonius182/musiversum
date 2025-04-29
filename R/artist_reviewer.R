@@ -182,66 +182,68 @@ server <- function(input, output, session) {
     matches <- get_entity_matches(name)
 
     # no matches ----
-    if (is.null(matches) || nrow(matches) == 0) {
-      resolved_results(bind_rows(
-        resolved_results(),
-        tibble(
-          artist_name = name,
-          artist_czid = czid,
-          wikidata_id = "Not Found",
-          wikipedia_nl = NA_character_,
-          wikipedia_en = NA_character_,
-          title_nl = NA_character_,
-          title_en = NA_character_,
-          summary_nl = NA_character_,
-          summary_en = NA_character_,
-          modify = "not_found"
-
-        )
-      ))
-
-      current_index(i + 1)
-      return()  # Skip further processing
-    }
+    # if (is.null(matches) || nrow(matches) == 0) {
+    #   resolved_results(bind_rows(
+    #     resolved_results(),
+    #     tibble(
+    #       artist_name = name,
+    #       artist_czid = czid,
+    #       wikidata_id = "Not Found",
+    #       wikipedia_nl = NA_character_,
+    #       wikipedia_en = NA_character_,
+    #       title_nl = NA_character_,
+    #       title_en = NA_character_,
+    #       summary_nl = NA_character_,
+    #       summary_en = NA_character_,
+    #       modify = "not_found"
+    #
+    #     )
+    #   ))
+    #
+    #   current_index(i + 1)
+    #   return()  # Skip further processing
+    # }
 
     # check auto-resolve ----
-    auto_resolve <- FALSE
+    # auto_resolve <- FALSE
+    #
+    # if (nrow(matches) == 1) {
+    #   auto_resolve <- TRUE
+    # } else {
+    #   # Auto-resolve if the top match looks like a composer, etc.
+    #   desc <- matches$description[1]
+    #   if (!is.na(desc) && str_detect(desc,
+    #                                  regex("composer|conductor|musician|singer|pianist|guitarist|trumpeter",
+    #                                        ignore_case = TRUE))) {
+    #     auto_resolve <- TRUE
+    #   }
+    # }
+    #
+    # # . auto-resolve ----
+    # if (auto_resolve) {
+    #   urls_tib <- get_wikipedia_urls(matches$wikidata_id[1])
+    #   urls_tib$summary_nl[[1]] <- urls_tib$summary_nl[[1]] |> str_remove_all("(\r)?\n") |> str_replace_all("\t", " ")
+    #   urls_tib$summary_en[[1]] <- urls_tib$summary_en[[1]] |> str_remove_all("(\r)?\n") |> str_replace_all("\t", " ")
+    #
+    #   resolved_results(bind_rows(
+    #     resolved_results(),
+    #     tibble(
+    #       artist_name = name,
+    #       artist_czid = czid
+    #     ) |> bind_cols(urls_tib)
+    #   ))
+    #
+    #   current_index(i + 1)
+    # } else {
+    #   # . review needed ----
+    #   if (!is.null(matches) && nrow(matches) > 0) {
+    #     current_matches(matches |> arrange(desc(match_score)))
+    #   } else {
+    #     current_matches(NULL)
+    #   }
+    # }
 
-    if (nrow(matches) == 1) {
-      auto_resolve <- TRUE
-    } else {
-      # Auto-resolve if the top match looks like a composer, etc.
-      desc <- matches$description[1]
-      if (!is.na(desc) && str_detect(desc,
-                                     regex("composer|conductor|musician|singer|pianist|guitarist|trumpeter",
-                                           ignore_case = TRUE))) {
-        auto_resolve <- TRUE
-      }
-    }
-
-    # . auto-resolve ----
-    if (auto_resolve) {
-      urls_tib <- get_wikipedia_urls(matches$wikidata_id[1])
-      urls_tib$summary_nl[[1]] <- urls_tib$summary_nl[[1]] |> str_remove_all("(\r)?\n") |> str_replace_all("\t", " ")
-      urls_tib$summary_en[[1]] <- urls_tib$summary_en[[1]] |> str_remove_all("(\r)?\n") |> str_replace_all("\t", " ")
-
-      resolved_results(bind_rows(
-        resolved_results(),
-        tibble(
-          artist_name = name,
-          artist_czid = czid
-        ) |> bind_cols(urls_tib)
-      ))
-
-      current_index(i + 1)
-    } else {
-      # . review needed ----
-      if (!is.null(matches) && nrow(matches) > 0) {
-        current_matches(matches |> arrange(desc(match_score)))
-      } else {
-        current_matches(NULL)
-      }
-    }
+    current_matches(matches |> arrange(desc(match_score)))
   })
 
   output$selection_ui <- renderUI({
