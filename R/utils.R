@@ -13,15 +13,23 @@ salsa_git_version <- function(qfn_repo) {
 get_entity_matches <- function(name, lang = "nl", fallback_lang = "en") {
 
   try_search <- function(language) {
-    resp <- request("https://www.wikidata.org/w/api.php") |>
-      req_url_query(
-        action = "wbsearchentities",
-        search = name,
-        language = language,
-        format = "json"
-      ) |> req_perform()
 
-    if (resp_status(resp) != 200) return(NULL)
+    resp <- tryCatch(
+      {
+        request("https://www.wikidata.org/w/api.php") |>
+          req_url_query(
+            action = "wbsearchentities",
+            search = name,
+            language = language,
+            format = "json"
+          ) |> req_perform()
+      }, error = function(e) {
+        flog.warn(str_glue("wikidata: {name}, {conditionMessage(e)}"), name = config$log_slug)
+        return(NA_character_)
+      }
+    )
+
+    if (length(resp) == 1 || resp_status(resp) != 200) return(NULL)  # Name not found
 
     data <- resp_body_json(resp)
     matches <- data$search
@@ -38,6 +46,7 @@ get_entity_matches <- function(name, lang = "nl", fallback_lang = "en") {
   }
 
   matches <- try_search(lang)
+
   if (is.null(matches) && lang != fallback_lang) {
     matches <- try_search(fallback_lang)
   }
@@ -51,9 +60,16 @@ get_summary <- function(title, lang) {
 
   summary_url <- glue("https://{lang}.wikipedia.org/api/rest_v1/page/summary/{URLencode(title)}")
 
-  resp <- request(summary_url) |> req_perform()
+  resp <- tryCatch(
+    {
+      request(summary_url) |> req_perform()
+    }, error = function(e) {
+      flog.warn(str_glue("wikipedia.{lang}: {title}, {conditionMessage(e)}"), name = config$log_slug)
+      return(NA_character_)
+    }
+  )
 
-  if (resp_status(resp) != 200) return(NA_character_)
+  if (length(resp) == 1 || resp_status(resp) != 200) return(NA_character_)  # Summary not found
 
   resp_body_json(resp)$extract %||% NA_character_
 }
@@ -62,9 +78,16 @@ get_summary <- function(title, lang) {
 get_wikipedia_urls <- function(wikidata_id) {
   url <- glue("https://www.wikidata.org/wiki/Special:EntityData/{wikidata_id}.json")
 
-  resp <- request(url) |> req_perform()
+  resp <- tryCatch(
+    {
+      request(url) |> req_perform()
+    }, error = function(e) {
+      flog.warn(str_glue("wikidata: {wikidata_id}, {conditionMessage(e)}"), name = config$log_slug)
+      return(NA_character_)
+    }
+  )
 
-  if (resp_status(resp) != 200) {
+  if (length(resp) == 1 || resp_status(resp) != 200) {
     return(tibble(
       wikidata_id   = wikidata_id,
       wikipedia_nl  = NA_character_,
@@ -102,24 +125,26 @@ get_wikipedia_urls <- function(wikidata_id) {
   )
 }
 
-get_commons_url <- function(entity, width = 300) {
+get_commons_url <- function(entity, width = 250) {
   image_info <- entity$claims$P18
 
-  if (length(image_info) == 0) {
-    return(NA_character_)  # No image found
-  }
+  if (length(image_info) == 0) return(NA_character_)  # No image metadata found
 
-  browser()
   filename <- image_info[[1]]$mainsnak$datavalue$value
-  filename_clean <- gsub(" ", "_", filename)
-  file_hash <- digest::digest(tolower(filename_clean), algo = "md5", serialize = FALSE)
+  filename_encoded <- URLencode(gsub(" ", "_", filename), reserved = TRUE)
+  img_url <- str_glue("https://commons.wikimedia.org/wiki/Special:FilePath/{filename_encoded}")
 
-  # Step 5: Build thumbnail URL (resized to 300px wide)
-  thumb_url <- str_glue("https://upload.wikimedia.org/wikipedia/commons/thumb/{substr(file_hash, 1, 1)}/{substr(file_hash, 1, 2)}/{filename_clean}/{width}px-{filename_clean}")
+  # check image file exists
+  head_res <- tryCatch(
+    {
+      request(img_url) |> req_method("HEAD") |> req_options(followlocation = TRUE) |> req_perform()
+    }, error = function(e) {
+      flog.warn(str_glue("wikimedia: {img_url}, {conditionMessage(e)}"), name = config$log_slug)
+      return(NA_character_)
+    }
+  )
 
-  return(thumb_url)
-  # filename_encoded <- URLencode(gsub(" ", "_", filename), reserved = TRUE)
-  # image_url <- str_glue("https://commons.wikimedia.org/wiki/Special:FilePath/{filename_encoded}")
+  if (length(head_res) == 1 || resp_status(head_res) != 200) return(NA_character_)  # No image file found
 
-  # return(image_url)
+  return(img_url)
 }

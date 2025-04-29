@@ -1,5 +1,5 @@
 
-ls_resolved_artists <- dir_ls(path = "/home/lon/Downloads/", type = "file", regexp = "resolved_artists_c")
+ls_resolved_artists <- dir_ls(path = "/home/lon/Downloads/", type = "file", regexp = "resolved_artists_d")
 combined_data <- map_dfr(ls_resolved_artists, ~ read_tsv(.x, col_types = cols(.default = "c")))
 artist_reviews_dir <- "/mnt/muw/cz_artists_parts/artist_reviews/"
 
