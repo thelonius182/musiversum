@@ -82,6 +82,7 @@ server <- function(input, output, session) {
     title_en = character(),
     summary_nl = character(),
     summary_en = character(),
+    img_url = character(),
     modify = "blank"
   ))
 
@@ -182,27 +183,28 @@ server <- function(input, output, session) {
     matches <- get_entity_matches(name)
 
     # no matches ----
-    # if (is.null(matches) || nrow(matches) == 0) {
-    #   resolved_results(bind_rows(
-    #     resolved_results(),
-    #     tibble(
-    #       artist_name = name,
-    #       artist_czid = czid,
-    #       wikidata_id = "Not Found",
-    #       wikipedia_nl = NA_character_,
-    #       wikipedia_en = NA_character_,
-    #       title_nl = NA_character_,
-    #       title_en = NA_character_,
-    #       summary_nl = NA_character_,
-    #       summary_en = NA_character_,
-    #       modify = "not_found"
-    #
-    #     )
-    #   ))
-    #
-    #   current_index(i + 1)
-    #   return()  # Skip further processing
-    # }
+    if (is.null(matches) || nrow(matches) == 0) {
+      resolved_results(bind_rows(
+        resolved_results(),
+        tibble(
+          artist_name = name,
+          artist_czid = czid,
+          wikidata_id = "Not Found",
+          wikipedia_nl = NA_character_,
+          wikipedia_en = NA_character_,
+          title_nl = NA_character_,
+          title_en = NA_character_,
+          summary_nl = NA_character_,
+          summary_en = NA_character_,
+          img_url = NA_character_,
+          modify = "not_found"
+
+        )
+      ))
+
+      current_index(i + 1)
+      return()  # Skip further processing
+    }
 
     # check auto-resolve ----
     # auto_resolve <- FALSE
@@ -301,6 +303,7 @@ server <- function(input, output, session) {
         title_en = NA_character_,
         summary_nl = NA_character_,
         summary_en = NA_character_,
+        img_url = NA_character_,
         modify = "rejected"
       ),
       resolved_results()
@@ -351,8 +354,9 @@ server <- function(input, output, session) {
       selection = "none",
       options = list(
         columnDefs = list(
+          list(visible = FALSE, targets = c(4, 5, 6, 7, 10)),
           list(
-            targets = 10,
+            targets = 11,
             searching = FALSE,
             render = JS(
               "function(data, type, row, meta) {",
@@ -370,7 +374,7 @@ server <- function(input, output, session) {
       });
     ")
     ) |>
-      formatStyle(columns = 1:10, cursor = "pointer")
+      formatStyle(columns = 1:11, cursor = "pointer")
   })
 
   observeEvent(input$cell_copied, {
@@ -404,7 +408,7 @@ server <- function(input, output, session) {
   observeEvent(input$results_tbl_cell_clicked, {
     click <- input$results_tbl_cell_clicked
 
-    if (is.null(click$value) || click$col != 10) return()  # Only if Edit button clicked
+    if (is.null(click$value) || click$col != 11) return()  # Only if Edit button clicked
 
     row_id <- click$row
     current_data <- resolved_results()[row_id, ]

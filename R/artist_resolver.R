@@ -24,7 +24,7 @@ server <- function(input, output, session) {
   current_matches <- reactiveVal(NULL)
   current_artist <- reactiveVal(NULL)
   processing_active <- reactiveVal(FALSE)
-  artist_rgx <- "artist|composer|conductor|guitarist|musician|pianist|singer|trumpeter"
+  artist_rgx <- "(?<!\\w)artist(?!\\s+discography)\\b|composer|conductor|guitarist|musician|pianist|singer|trumpeter"
 
   resolved_results <- reactiveVal(tibble(
     artist_name = character(),

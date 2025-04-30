@@ -8,8 +8,6 @@ set_config <- function() {
 
   if (get_git_branch() == "main") {
     source("R/config_prd.R")
-  } else if (get_git_branch() == "ubu_rvw2") {
-    source("R/config_ubu.R")
   } else {
     source("R/config_dev.R")
   }

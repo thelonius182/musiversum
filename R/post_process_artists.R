@@ -1,7 +1,7 @@
 
-ls_resolved_artists <- dir_ls(path = "/home/lon/Downloads/", type = "file", regexp = "resolved_artists_d")
+ls_resolved_artists <- dir_ls(path = "h:/artist_resolver/resources/", type = "file", regexp = "resolved_artists_d")
 combined_data <- map_dfr(ls_resolved_artists, ~ read_tsv(.x, col_types = cols(.default = "c")))
-artist_reviews_dir <- "/mnt/muw/cz_artists_parts/artist_reviews/"
+artist_reviews_dir <- "h:/artist_resolver/resources/reviews/"
 
 resolved_artists_notfound <- combined_data |> filter(wikidata_id == "Not Found")
 write_tsv(resolved_artists_notfound, file = str_glue("{artist_reviews_dir}resolved_artists_notfound.tsv", na = ""))
