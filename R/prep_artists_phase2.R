@@ -1,5 +1,5 @@
 
-ls_resolved_artists <- dir_ls(path = "h:/artist_resolver/resources/", type = "file", regexp = "resolved_artists_d")
+ls_resolved_artists <- dir_ls(path = "h:/artist_resolver/resources/", type = "file", regexp = "resolved_artists_d0")
 combined_data <- map_dfr(ls_resolved_artists, ~ read_tsv(.x, col_types = cols(.default = "c")))
 artist_reviews_dir <- "h:/artist_resolver/resources/reviews/"
 
