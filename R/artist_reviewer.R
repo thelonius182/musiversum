@@ -1,5 +1,12 @@
-# -------------- Shiny App --------------
+# Load project-specific .Rprofile if not already loaded
+if (!exists(".rprofile_loaded")) {
+  rprofile_path <- file.path(getwd(), ".Rprofile")
+  if (file.exists(rprofile_path)) {
+    source(rprofile_path)
+  }
+}
 
+# User Interface ----
 ui <- page_fluid(
   theme = bs_theme(
     bootswatch = "flatly",
@@ -61,6 +68,7 @@ ui <- page_fluid(
   )
 )
 
+# Server ----
 server <- function(input, output, session) {
   artist_queue <- reactiveVal(NULL)
   current_index <- reactiveVal(1)
@@ -435,4 +443,8 @@ server <- function(input, output, session) {
   })
 }
 
-shinyApp(ui, server)
+options(shiny.launch.browser = TRUE)
+runApp(
+  list(ui = ui, server = server),
+  launch.browser = TRUE
+)

@@ -1,24 +1,36 @@
-message(stringr::str_glue("using .Rprofile in {getwd()}"))
+if (!exists(".rprofile_loaded")) {
+  .rprofile_loaded <- TRUE
 
-get_git_branch <- function() {
-  system("git rev-parse --abbrev-ref HEAD", intern = TRUE)
-}
+  message(stringr::str_glue("using .Rprofile in {getwd()}"))
 
-set_config <- function() {
-
-  if (get_git_branch() == "main") {
-    source("R/config_prd.R")
-  } else {
-    source("R/config_dev.R")
+  get_git_branch <- function() {
+    system("git rev-parse --abbrev-ref HEAD", intern = TRUE)
   }
-}
 
-check_git_branch <- function() {
+  set_config <- function() {
 
-  if (get_git_branch() == "main") {
-    message(">>>\n>>>    WARNING: you are on the MAIN BRANCH, normally used for merging only.\n>>>\n")
+    if (get_git_branch() == "main") {
+      source("R/config_prd.R")
+    } else {
+      source("R/config_dev.R")
+    }
   }
-}
 
-set_config()
-check_git_branch()
+  check_git_branch <- function() {
+
+    if (get_git_branch() == "main") {
+      message(">>>\n>>>    WARNING: you are on the MAIN BRANCH, normally used for merging only.\n>>>\n")
+    }
+  }
+
+  tryCatch(
+    {
+      set_config()
+    }, error = function(e) {
+      message("Error during .Rprofile execution: ", conditionMessage(e))
+      # optionally: quit(status = 1) or log to a file
+    }
+  )
+
+  check_git_branch()
+}

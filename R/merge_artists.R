@@ -8,8 +8,8 @@ pacman::p_load(
   tidyr,
   yaml
 )
-conflict_prefer("pull", "dplyr", quiet = TRUE)
-conflict_prefer("filter", "dplyr", quiet = TRUE)
+# conflict_prefer("pull", "dplyr", quiet = TRUE)
+conflicts_prefer(dplyr::filter, dplyr::pull, .quiet = TRUE)
 
 # Get command-line arguments
 args <- commandArgs(trailingOnly = TRUE)
