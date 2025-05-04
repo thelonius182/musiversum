@@ -148,3 +148,21 @@ get_commons_url <- function(entity, width = 250) {
 
   return(img_url)
 }
+
+# TO VALIDATE CONN:
+# sqlstmt <- "show variables like 'character_set_client'"
+# result <- dbGetQuery(conn = wp_conn, statement = sqlstmt)
+get_wp_conn <- function() {
+
+  grh_conn <- tryCatch(
+    {
+      dbConnect(drv = MySQL(), user = db_user, password = db_password,
+                dbname = db_name, host = db_host, port = 3306)
+    },
+    error = function(cond) {
+      return("connection-error")
+    }
+  )
+
+  return(grh_conn)
+}

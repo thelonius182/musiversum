@@ -35,7 +35,7 @@ ui <- page_fluid(
       ),
       div(
         style = "margin-top: 20px;",
-        fileInput("tsv_file", "Upload .tsv-file with artist names")
+        fileInput("rds_file", "Select .RDS-file with artist names")
       ),
       div(
         style = "margin-top: 20px;",
@@ -44,7 +44,7 @@ ui <- page_fluid(
           actionButton("start_btn", "Start"),
           actionButton("stop_btn", "Stop"),
           uiOutput("download_ui"),
-          actionButton("merge_artists_btn", "Merge artists", style = "display: none;")
+          actionButton("merge_artists_btn", "Merge artists", class = "btn-info", style = "display: none;")
         )
       ),
       div(
@@ -94,22 +94,17 @@ server <- function(input, output, session) {
     modify = "blank"
   ))
 
-  # download_results ----
-  output$download_results <- downloadHandler(
-    filename = function() {
-      paste0("artists_review_completed_", Sys.Date(), ".tsv")
-    },
-    content = function(file) {
-      on.exit({
-        session$onFlushed(function() {
-          shinyjs::show("merge_artists_btn")
-          app_msg("📥 Download completed. Ready to merge.")
-        }, once = TRUE)
-      })
+  observeEvent(input$store_btn, {
+    on.exit({
+      session$onFlushed(function() {
+        shinyjs::show("merge_artists_btn")
+        app_msg("📥 Download completed. Ready to merge.")
+      }, once = TRUE)
+    })
 
-      write_tsv(resolved_results(), file)
-    }
-  )
+    qfn <- paste0("h:/artist_resolver/sts_400/wd_artists_reviewed.RDS")
+    write_rds(resolved_results(), qfn)
+  })
 
   # merge artists ----
   observeEvent(input$merge_artists_btn, {
@@ -156,15 +151,16 @@ server <- function(input, output, session) {
   # show download-btn ----
   output$download_ui <- renderUI({
     if (!processing_active() && !is.null(artist_queue())) {
-      downloadButton("download_results", "Download Results", class = "btn-success")
+      actionButton("store_btn", "Store Results", class = "btn-success")
     }
   })
 
   # load list of artists ----
-  # /mnt/muw/cz_artists_parts/artist_reviews/resolved_artists_review.tsv
+  # dft: wd_artists_for_review.RDS in folder sts_300
   observeEvent(input$start_btn, {
-    req(input$tsv_file)
-    df <- read_tsv(input$tsv_file$datapath, col_types = cols(.default = "c")) |> rename(artist_id = artist_czid)
+    req(input$rds_file)
+    # df <- read_tsv(input$tsv_file$datapath, col_types = cols(.default = "c")) |> rename(artist_id = artist_czid)
+    df <- read_rds(input$rds_file$datapath)
     artist_queue(df)
     current_index(1)
     processing_active(TRUE)
