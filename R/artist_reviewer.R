@@ -37,7 +37,7 @@ ui <- page_fluid(
           actionButton("start_btn", "Start"),
           actionButton("stop_btn", "Stop"),
           uiOutput("download_ui"),
-          actionButton("merge_artists_btn", "Merge artists", style = "display: none;")
+          actionButton("merge_artists_btn", "Merge artists", class = "btn-info", style = "display: none;")
         )
       ),
       div(
@@ -85,22 +85,34 @@ server <- function(input, output, session) {
     modify = "blank"
   ))
 
-  # download_results ----
-  output$download_results <- downloadHandler(
-    filename = function() {
-      paste0("artists_review_completed_", Sys.Date(), ".tsv")
-    },
-    content = function(file) {
-      on.exit({
-        session$onFlushed(function() {
-          shinyjs::show("merge_artists_btn")
-          app_msg("📥 Download completed. Ready to merge.")
-        }, once = TRUE)
-      })
+  # # download_results ----
+  # output$download_results <- downloadHandler(
+  #   filename = function() {
+  #     paste0("/mnt/muw/cz_artists_parts/artists_review_completed_", Sys.Date(), ".tsv")
+  #   },
+  #   content = function(file) {
+  #     on.exit({
+  #       session$onFlushed(function() {
+  #         shinyjs::show("merge_artists_btn")
+  #         app_msg("📥 Download completed. Ready to merge.")
+  #       }, once = TRUE)
+  #     })
+  #
+  #     write_tsv(resolved_results(), file)
+  #   }
+  # )
 
-      write_tsv(resolved_results(), file)
-    }
-  )
+  observeEvent(input$store_btn, {
+    on.exit({
+      session$onFlushed(function() {
+        shinyjs::show("merge_artists_btn")
+        app_msg("📥 Download completed. Ready to merge.")
+      }, once = TRUE)
+    })
+
+    qfn <- paste0("/mnt/muw/cz_artists_parts/artists_review_completed_", Sys.Date(), ".tsv")
+    write_tsv(resolved_results(), qfn)
+  })
 
   # merge artists ----
   observeEvent(input$merge_artists_btn, {
@@ -147,7 +159,7 @@ server <- function(input, output, session) {
   # show download-btn ----
   output$download_ui <- renderUI({
     if (!processing_active() && !is.null(artist_queue())) {
-      downloadButton("download_results", "Download Results", class = "btn-success")
+      actionButton("store_btn", "Store Results", class = "btn-success")
     }
   })
 
