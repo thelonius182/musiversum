@@ -102,26 +102,26 @@ server <- function(input, output, session) {
       }, once = TRUE)
     })
 
-    qfn <- paste0("h:/artist_resolver/sts_400/wd_artists_reviewed.RDS")
-    write_rds(resolved_results(), qfn)
+    write_rds(resolved_results(), "h:/artist_resolver/sts_400/wd_artists_reviewed.RDS")
   })
 
   # merge artists ----
   observeEvent(input$merge_artists_btn, {
     if (!is.null(merge_process()) && merge_process()$is_alive()) {
       showNotification("Merging already in progress...", type = "warning")
-      return()  # Don't start another process
+      return() # Don't start another process
     }
+
     app_msg("🔄 Merging artists, please wait...")
-    tmp_resolved_results <- tempfile(fileext = ".rds")
-    write_rds(resolved_results(), tmp_resolved_results)
+    # tmp_review_results <- tempfile(fileext = ".RDS")
+    # write_rds(resolved_results(), tmp_review_results)
 
     # Start the external merge process
     process <- callr::r_bg(
       function(script, args) {
         system2("Rscript", c(script, args))
       },
-      args = list("merge_artists.R", tmp_resolved_results)
+      args = list("cz_wikidata_500.R")
     )
 
     merge_process(process)  # Store the process object
@@ -160,7 +160,7 @@ server <- function(input, output, session) {
   observeEvent(input$start_btn, {
     req(input$rds_file)
     # df <- read_tsv(input$tsv_file$datapath, col_types = cols(.default = "c")) |> rename(artist_id = artist_czid)
-    df <- read_rds(input$rds_file$datapath)
+    df <- read_rds(input$rds_file$datapath) |> rename(artist_id = artist_czid)
     artist_queue(df)
     current_index(1)
     processing_active(TRUE)
@@ -209,45 +209,6 @@ server <- function(input, output, session) {
       current_index(i + 1)
       return()  # Skip further processing
     }
-
-    # check auto-resolve ----
-    # auto_resolve <- FALSE
-    #
-    # if (nrow(matches) == 1) {
-    #   auto_resolve <- TRUE
-    # } else {
-    #   # Auto-resolve if the top match looks like a composer, etc.
-    #   desc <- matches$description[1]
-    #   if (!is.na(desc) && str_detect(desc,
-    #                                  regex("composer|conductor|musician|singer|pianist|guitarist|trumpeter",
-    #                                        ignore_case = TRUE))) {
-    #     auto_resolve <- TRUE
-    #   }
-    # }
-    #
-    # # . auto-resolve ----
-    # if (auto_resolve) {
-    #   urls_tib <- get_wikipedia_urls(matches$wikidata_id[1])
-    #   urls_tib$summary_nl[[1]] <- urls_tib$summary_nl[[1]] |> str_remove_all("(\r)?\n") |> str_replace_all("\t", " ")
-    #   urls_tib$summary_en[[1]] <- urls_tib$summary_en[[1]] |> str_remove_all("(\r)?\n") |> str_replace_all("\t", " ")
-    #
-    #   resolved_results(bind_rows(
-    #     resolved_results(),
-    #     tibble(
-    #       artist_name = name,
-    #       artist_czid = czid
-    #     ) |> bind_cols(urls_tib)
-    #   ))
-    #
-    #   current_index(i + 1)
-    # } else {
-    #   # . review needed ----
-    #   if (!is.null(matches) && nrow(matches) > 0) {
-    #     current_matches(matches |> arrange(desc(match_score)))
-    #   } else {
-    #     current_matches(NULL)
-    #   }
-    # }
 
     current_matches(matches |> arrange(desc(match_score)))
   })

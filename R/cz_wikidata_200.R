@@ -4,7 +4,7 @@ ui <- fluidPage(
   titlePanel("Wikidata Artist Resolver"),
   sidebarLayout(
     sidebarPanel(
-      fileInput("tsv_file", "Upload .tsv-file with artist names"),
+      fileInput("rds_file", "Select .RDS-file with artist names"),
       actionButton("start_btn", "Start Processing"),
       uiOutput("download_ui"),
       div(
@@ -32,32 +32,36 @@ server <- function(input, output, session) {
     wikidata_id = character(),
     wikipedia_nl = character(),
     wikipedia_en = character(),
+    title_nl = character(),
+    title_en = character(),
     summary_nl = character(),
     summary_en = character(),
     img_url = character()
   ))
 
-  # downloadHandler ----
-  output$download_results <- downloadHandler(
-    filename = function() {
-      paste0("resolved_artists_", Sys.Date(), ".tsv")
-    },
-    content = function(file) {
-      write_tsv(resolved_results(), file)
-    }
-  )
+  # store result ----
+  observeEvent(input$store_btn, {
+    req(input$rds_file)
+    on.exit({
+      session$onFlushed(function() {
+        stopApp()
+      }, once = TRUE)
+    })
+
+    qfn <- paste0("h:/artist_resolver/sts_200/", str_replace(input$rds_file$name, "cz", "wd"))
+    write_rds(resolved_results(), qfn)
+  })
 
   output$download_ui <- renderUI({
     if (!processing_active() && !is.null(artist_queue())) {
-      downloadButton("download_results", "Download Results", class = "btn-success")
+      actionButton("store_btn", "Store Results", class = "btn-success")
     }
   })
 
   # load list of artists ----
-  # /mnt/muw/cz_artists_parts/cz_artists_chunk_x.tsv
   observeEvent(input$start_btn, {
-    req(input$tsv_file)
-    df <- read_tsv(input$tsv_file$datapath, col_types = cols(.default = "c"))
+    req(input$rds_file)
+    df <- read_rds(input$rds_file$datapath) |> mutate(artist_id = as.character(artist_id))
     artist_queue(df)
     current_index(1)
     processing_active(TRUE)
@@ -99,6 +103,8 @@ server <- function(input, output, session) {
                 wikidata_id = "Not Found",
                 wikipedia_nl = NA_character_,
                 wikipedia_en = NA_character_,
+                title_nl = NA_character_,
+                title_en = NA_character_,
                 summary_nl = NA_character_,
                 summary_en = NA_character_,
                 img_url = NA_character_
@@ -137,6 +143,8 @@ server <- function(input, output, session) {
                 wikidata_id = "Needs Review",
                 wikipedia_nl = NA_character_,
                 wikipedia_en = NA_character_,
+                title_nl = NA_character_,
+                title_en = NA_character_,
                 summary_nl = NA_character_,
                 summary_en = NA_character_,
                 img_url = NA_character_
@@ -147,37 +155,9 @@ server <- function(input, output, session) {
         }
 
         processing_active(FALSE)
-        })
+      })
     }
   })
-
-  # Select a match ----
-  # output$selection_ui <- renderUI({
-  #   matches <- current_matches()
-  #
-  #   if (is.null(matches)) return(NULL)
-  #
-  #   selectInput("selected_id", "Select a match:",
-  #               choices = setNames(matches$wikidata_id,
-  #                                  paste0(matches$label, " - ", matches$description)))
-  # })
-
-  # Confirm a match ----
-  # observeEvent(input$confirm_btn, {
-  #   req(input$selected_id)
-  #   urls_tib <- get_wikipedia_urls(input$selected_id)
-  #
-  #   resolved_results(bind_rows(
-  #     resolved_results(),
-  #     tibble(
-  #       artist_name = current_artist(),
-  #       artist_czid = artist_queue()[current_index(), ]$artist_id
-  #     ) |> bind_cols(urls_tib)
-  #   ))
-  #
-  #   current_matches(NULL)
-  #   current_index(current_index() + 1)
-  # })
 
   output$results_tbl <- renderTable({
     resolved_results()

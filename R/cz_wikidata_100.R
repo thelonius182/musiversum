@@ -14,7 +14,7 @@ select t2.name as artist_name,
        p1.post_date as bc_date,
        p1.ID as bc_id,
        p1.post_type as bc_type,
-       t2.term_id as artist_czid,
+       t2.term_id as artist_id,
        ROW_NUMBER() OVER (PARTITION BY t2.name ORDER BY p1.post_title) AS row_num
 from wp_posts p1
    join wp_term_relationships r1 on r1.object_id = p1.ID
@@ -24,11 +24,25 @@ where t1.term_taxonomy_id in (select term_taxonomy_id from wp_term_taxonomy wher
   and p1.post_status = 'publish'
   and p1.ID in (select object_id from wp_term_relationships where term_taxonomy_id = 5) -- NL-posts only
 )
-select artist_name, artist_czid from ds1 where row_num = 4;
+select artist_name, artist_id from ds1 where row_num = 4;
 "
-
 qry_rst <- dbGetQuery(wp_conn, qry)
-write_rds(qry_rst, "h:/artist_resolver/sts_100/cz_artists_4p.RDS")
+
+# only new ones, so remove artist-id's already processed in any sts_300 tibble
+ls_wd_artists_300 <- dir_ls(path = "h:/artist_resolver/sts_300/", type = "file", regexp = "\\.RDS$")
+
+if (length(ls_wd_artists_300) > 0) {
+  combined_data_300 <- map_dfr(ls_wd_artists_300, ~ read_rds(.x)) |> rename(artist_id = artist_czid)
+  qry_rst <- qry_rst |> filter(!artist_id %in% combined_data_300$artist_id)
+}
+
+qfn <- "h:/artist_resolver/sts_100/cz_artists_4p.RDS"
+if (nrow(qry_rst) > 0) {
+  write_rds(qry_rst, qfn)
+} else {
+  file_delete(qfn)
+  cat("no new artists found\n")
+}
 
 # valid artists ----
 qry <- "
@@ -66,7 +80,6 @@ from ds5 left join ds4
 where ds4.n = 2
 order by ds5.object_id;
 "
-
 qry_rst <- dbGetQuery(wp_conn, qry)
 write_rds(qry_rst, "h:/artist_resolver/sts_100/cz_artists_valid.RDS")
 
@@ -109,7 +122,6 @@ from ds5 left join ds4 on ds4.name = ds5.name
 where ds4.n != 2
 order by ds5.name;
 "
-
 qry_rst <- dbGetQuery(wp_conn, qry)
 write_tsv(qry_rst, "h:/artist_resolver/sts_100/cz_artists_invalid.tsv")
 
