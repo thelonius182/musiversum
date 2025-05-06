@@ -51,6 +51,20 @@ get_entity_matches <- function(name, lang = "nl", fallback_lang = "en") {
     matches <- try_search(fallback_lang)
   }
 
+  if (is.null(matches)) {
+    parts <- str_split(name, "[- ]", simplify = TRUE)
+
+    if (ncol(parts) > 1) {
+      name <- paste(parts[1, 1:min(3, ncol(parts))], collapse = " ")
+      matches <- try_search(lang)
+
+      if (is.null(matches) && ncol(parts) > 2) {
+        name <- paste(parts[1, 1], parts[1,3], collapse = " ")
+        matches <- try_search(lang)
+      }
+    }
+  }
+
   matches
 }
 

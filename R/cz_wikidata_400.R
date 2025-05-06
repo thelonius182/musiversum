@@ -117,12 +117,9 @@ server <- function(input, output, session) {
     # write_rds(resolved_results(), tmp_review_results)
 
     # Start the external merge process
-    process <- callr::r_bg(
-      function(script, args) {
-        system2("Rscript", c(script, args))
-      },
-      args = list("cz_wikidata_500.R")
-    )
+    process <- callr::r_bg(function() {
+      system2("Rscript", "C:/cz_salsa/r_proj_develop/artist_resolver/R/cz_wikidata_500.R")
+    })
 
     merge_process(process)  # Store the process object
   })
