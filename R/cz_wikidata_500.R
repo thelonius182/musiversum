@@ -18,26 +18,36 @@ conflicts_prefer(dplyr::filter, dplyr::pull, .quiet = TRUE)
 while (TRUE) {
 
   # review_results <- read_rds(qfn_review_results)
-  review_results <- read_rds("h:/artist_resolver/sts_400/wd_artists_reviewed.RDS")
+  review_results_rds <- read_rds("h:/artist_resolver/sts_400/wd_artists_reviewed.RDS")
 
-  if (nrow(review_results) == 0) break
+  if (nrow(review_results_rds) == 0) break
 
   # turn "rejected" into "not found"
-  review_results <- review_results |> select(-modify) |>
-    mutate(wikidata_id = if_else(wikidata_id == "Rejected", "Not Found", wikidata_id))
+  review_results <- review_results_rds |>
+    mutate(wikidata_id = if_else(modify == "rejected", "Not Found", wikidata_id),
+           r1 = row_number()) |> select(-modify) |>
+    # remove earlier matches of the same artist
+    group_by(artist_czid) |> mutate(id_idx = row_number()) |> ungroup() |> arrange(r1) |>
+    filter(id_idx == 1) |> select(-r1, -id_idx)
 
   # combine them with the existing sts_300 objects
   dir_300 <- "h:/artist_resolver/sts_300/"
   ls_wd_artists_300 <- dir_ls(path = dir_300, type = "file", regexp = "\\.RDS$")
 
   if (length(ls_wd_artists_300) > 0) {
-    # remove review results
     combined_data_300 <- map_dfr(ls_wd_artists_300, ~ read_rds(.x)) |>
       filter(!artist_czid %in% review_results$artist_czid)
     review_results <- bind_rows(review_results, combined_data_300) |> distinct()
+
+    # remove previous results ----
+    cur_300s <- dir_ls(path = "h:/artist_resolver/sts_300/", type = "file")
+
+    for (qfn in cur_300s) {
+      file_delete(qfn)
+    }
   }
 
-  # classify the result
+  # (re-)classify the result
   # . duplicate Q-id's
   review_results_duplicate_ids <- review_results |> filter(str_detect(wikidata_id, "^Q")) |> group_by(wikidata_id) |>
     summarise(n = n()) |> filter(n > 1)

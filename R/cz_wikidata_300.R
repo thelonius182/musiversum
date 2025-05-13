@@ -11,6 +11,20 @@ if (length(ls_wd_artists_300) > 0) {
   combined_data_200 <- bind_rows(combined_data_200, combined_data_300) |> distinct()
 }
 
+# remove previous results ----
+cur_300s <- dir_ls(path = "h:/artist_resolver/sts_300/", type = "file")
+
+for (qfn in cur_300s) {
+  file_delete(qfn)
+}
+
+# remove previous sts-400 results ----
+cur_400s <- dir_ls(path = "h:/artist_resolver/sts_400/", type = "file")
+
+for (qfn in cur_400s) {
+  file_delete(qfn)
+}
+
 # classify the result
 # . duplicate Q-id's
 wd_artists_200_duplicate_ids <- combined_data_200 |> filter(str_detect(wikidata_id, "^Q")) |> group_by(wikidata_id) |>

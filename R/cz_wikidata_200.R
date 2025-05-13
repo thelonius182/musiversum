@@ -4,7 +4,7 @@ ui <- fluidPage(
   titlePanel("Wikidata Artist Resolver"),
   sidebarLayout(
     sidebarPanel(
-      fileInput("rds_file", "Select .RDS-file with artist names"),
+      fileInput("rds_file", "Select an .RDS-file from <h:/artist_resolver/sts_150>'."),
       actionButton("start_btn", "Start Processing"),
       uiOutput("download_ui"),
       div(

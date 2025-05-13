@@ -6,29 +6,39 @@ if (typeof(wp_conn) != "S4") {
   stop()
 }
 
+# remove previous results ----
+cur_100s <- dir_ls(path = "h:/artist_resolver/sts_100/", type = "file")
+
+for (qfn in cur_100s) {
+  file_delete(qfn)
+}
+
 # artists with at least 4 broadcasts ----
 qry <- "
-with ds1 as (
-select t2.name as artist_name,
-       p1.post_title as bc_name,
-       p1.post_date as bc_date,
-       p1.ID as bc_id,
-       p1.post_type as bc_type,
-       t2.term_id as artist_id,
-       ROW_NUMBER() OVER (PARTITION BY t2.name ORDER BY p1.post_title) AS row_num
-from wp_posts p1
-   join wp_term_relationships r1 on r1.object_id = p1.ID
-   join wp_term_taxonomy t1 on t1.term_taxonomy_id = r1.term_taxonomy_id
-   join wp_terms t2 on t2.term_id = t1.term_id
-where t1.term_taxonomy_id in (select term_taxonomy_id from wp_term_taxonomy where taxonomy = 'programma_componist')
-  and p1.post_status = 'publish'
-  and p1.ID in (select object_id from wp_term_relationships where term_taxonomy_id = 5) -- NL-posts only
+WITH ds1 AS (
+    SELECT
+        t2.name AS artist_name,
+        p1.post_title AS bc_name,
+        p1.post_date AS bc_date,
+        p1.ID AS bc_id,
+        p1.post_type AS bc_type,
+        t2.term_id AS artist_id,
+        ROW_NUMBER() OVER (PARTITION BY t2.term_id ORDER BY p1.post_title) AS row_num
+    FROM wp_posts p1
+    INNER JOIN wp_term_relationships r1 ON r1.object_id = p1.ID
+    INNER JOIN wp_term_taxonomy t1 ON t1.term_taxonomy_id = r1.term_taxonomy_id
+    INNER JOIN wp_terms t2 ON t2.term_id = t1.term_id
+    INNER JOIN wp_term_relationships nlrel ON nlrel.object_id = p1.ID AND nlrel.term_taxonomy_id = 5
+    WHERE p1.post_status = 'publish'
+      AND t1.taxonomy = 'programma_componist'
 )
-select artist_name, artist_id from ds1 where row_num = 4;
+SELECT artist_name, artist_id
+FROM ds1
+WHERE row_num = 4;
 "
 qry_rst <- dbGetQuery(wp_conn, qry)
 
-# only new ones, so remove artist-id's already processed in any sts_300 tibble
+# only new ones, so remove artist-id's already present in any sts_300 tibble
 ls_wd_artists_300 <- dir_ls(path = "h:/artist_resolver/sts_300/", type = "file", regexp = "\\.RDS$")
 
 if (length(ls_wd_artists_300) > 0) {

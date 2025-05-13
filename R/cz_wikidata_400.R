@@ -33,10 +33,10 @@ ui <- page_fluid(
         style = "margin-top: 20px;",
         textOutput("status")
       ),
-      div(
-        style = "margin-top: 20px;",
-        fileInput("rds_file", "Select .RDS-file with artist names")
-      ),
+      # div(
+      #   style = "margin-top: 20px;",
+      #   fileInput("rds_file", "Select 'wd_artists_review.RDS' from <h:/artist_resolver/sts_300>'.")
+      # ),
       div(
         style = "margin-top: 20px;",
         div(
@@ -155,9 +155,10 @@ server <- function(input, output, session) {
   # load list of artists ----
   # dft: wd_artists_for_review.RDS in folder sts_300
   observeEvent(input$start_btn, {
-    req(input$rds_file)
+    # req(input$rds_file)
     # df <- read_tsv(input$tsv_file$datapath, col_types = cols(.default = "c")) |> rename(artist_id = artist_czid)
-    df <- read_rds(input$rds_file$datapath) |> rename(artist_id = artist_czid)
+    # df <- read_rds(input$rds_file$datapath) |> rename(artist_id = artist_czid)
+    df <- read_rds("h:/artist_resolver/sts_300/wd_artists_review.RDS") |> rename(artist_id = artist_czid)
     artist_queue(df)
     current_index(1)
     processing_active(TRUE)
@@ -355,12 +356,12 @@ server <- function(input, output, session) {
     i <- current_index()
 
     if (is.null(queue)) {
-      return("📥 Upload a file to begin.")
+      return("📥 Click START to begin.")
     }
 
     if (!processing_active()) {
       if (i > nrow(queue)) return("✅ Review completed")
-      return("✅ Exit review session")
+      return("✅ Review stopped. Click STORE to download results")
     }
 
     glue("🔄 Processing artist {i} of {nrow(queue)}")
